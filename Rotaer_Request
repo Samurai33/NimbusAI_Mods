@@ -1,0 +1,93 @@
+import requests
+import os
+import xml.etree.ElementTree as ET
+from dotenv import load_dotenv
+
+# Carrega variáveis do .env
+load_dotenv()
+
+API_KEY = os.getenv("NOTAM_API_KEY")
+API_PASS = os.getenv("NOTAM_API_PASS")
+API_URL = "https://api.decea.mil.br/aisweb/"
+
+# ICAO de exemplo - altere para testar outro aeródromo
+icao_code = "SBSP"  # Congonhas
+params = {
+    "apiKey": API_KEY,
+    "apiPass": API_PASS,
+    "area": "rotaer",
+    "icaoCode": icao_code,
+    # "force": "html"  # descomente se quiser o formato HTML
+}
+
+def consultar_rotaer():
+    print(f"🔍 Consultando dados do aeródromo {icao_code} na API AISWEB...")
+    try:
+        response = requests.get(API_URL, params=params, timeout=20)
+        response.raise_for_status()
+        return response.content
+    except requests.exceptions.RequestException as e:
+        print("❌ Erro ao conectar com a API:", e)
+        return None
+
+def exibir_dados_rotaer(xml_data):
+    try:
+        root = ET.fromstring(xml_data)
+
+        nome = root.findtext("name", "N/D")
+        cidade = root.findtext("city", "N/D")
+        estado = root.findtext("uf", "N/D")
+        tipo = root.findtext("type", "N/D")
+        uso = root.findtext("typeUtil", "N/D")
+        cat = root.findtext("cat", "N/D")
+        elevacao_ft = root.findtext("altFt", "N/D")
+        elevacao_m = root.findtext("altM", "N/D")
+        lat = root.findtext("latRotaer", "N/D")
+        lng = root.findtext("lngRotaer", "N/D")
+        utc = root.findtext("utc", "N/D")
+        fir = root.findtext("fir", "N/D")
+        jurisdicao = root.findtext("jur", "N/D")
+
+        org_elem = root.find("org")
+        org_nome = org_elem.findtext("name", "N/D") if org_elem is not None else "N/D"
+        org_tipo = org_elem.findtext("type", "N/D") if org_elem is not None else "N/D"
+        org_militar = org_elem.findtext("military", "N/D") if org_elem is not None else "N/D"
+
+        print("\n============================= ✈️ AERÓDROMO =============================")
+        print(f"📍 ICAO: {icao_code}  |  FIR: {fir}  |  UTC: {utc}")
+        print(f"📛 Nome: {nome}")
+        print(f"🏙️ Cidade: {cidade} - {estado}")
+        print(f"📦 Tipo: {tipo}  |  Uso: {uso}  |  Categoria: {cat}")
+        print(f"📏 Elevação: {elevacao_ft} pés ({elevacao_m} m)")
+        print(f"🧭 Coordenadas: {lat}, {lng}")
+        print(f"🏛️ Jurisdição: {jurisdicao}")
+        print(f"🏢 Organização: {org_nome} ({org_tipo}, {org_militar})")
+
+        # Frequências de comunicação (COM)
+        print("\n📡 Frequências de Comunicação:")
+        encontrou_freq = False
+        for service in root.findall(".//service"):
+            service_type = service.findtext("type", "").upper()
+            if service.get("type") == "COM" or service_type == "COM":
+                callsign = service.findtext("callsign", "N/D")
+                descr = service.findtext("descr", "")
+                freqs = service.findall("freqs/freq")
+                freq_list = [f.text for f in freqs if f is not None and f.text]
+                if callsign or freq_list:
+                    info = f"{callsign} ({descr})" if descr else callsign
+                    print(f"  📞 {info} - Frequências: {', '.join(freq_list) if freq_list else 'N/D'}")
+                    encontrou_freq = True
+        if not encontrou_freq:
+            print("  ❌ Nenhuma frequência COM disponível no momento.")
+
+        print("======================================================================\n")
+
+    except ET.ParseError as e:
+        print("❌ Erro ao interpretar XML:", e)
+    except Exception as e:
+        print("⚠️ Erro inesperado ao processar os dados:", e)
+
+# Execução
+xml_resultado = consultar_rotaer()
+if xml_resultado:
+    exibir_dados_rotaer(xml_resultado)
